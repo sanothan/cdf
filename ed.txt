@@ -1,58 +1,109 @@
-TASK: Move the existing Google Map component currently used in a public page to the Admin "Add Village" page and integrate it with the Village create form.
+UPGRADE TASK: Village Management Third-Party API Feature (Reverse Geocoding)
 
-CONTEXT:
-This project is a MERN app. A Google Map (or map component) was already implemented and shown on a public page (likely Home/About/Contact or a PublicMap page). We no longer want the map in any public page.
-We want the map only in Admin role, inside the Village Management module, specifically in the "Add Village" page/form.
+We already use Leaflet + OpenStreetMap tiles for selecting village locations.
+Now we must add an actual third-party API integration that is clearly demonstrable and aligns with rubric:
+Use OpenStreetMap Nominatim Reverse Geocoding to convert lat/lng into a human-readable address and auto-fill form fields when adding a village.
 
 GOALS:
-1) Find where the map is currently rendered in public pages.
-2) Remove that map UI from the public page completely (including unused imports, styling blocks, and any public routes/menu items that exist only for that map).
-3) Reuse the same map component (do not rewrite from scratch) in the "Add Village" page.
-4) In the Add Village form, allow admin to click on the map to set a marker location.
-5) When admin clicks the map, store the coordinates in form state:
-   - latitude
-   - longitude
-6) On submit, send latitude/longitude along with village data to backend.
-7) Update backend Village model (if not already) to store coordinates (either lat/lng fields or GeoJSON).
-8) Update backend Village create controller/service to validate that coordinates exist and save them.
-9) Show the selected coordinates on the Add Village UI (small read-only fields or a label).
-10) Ensure this is restricted to admin dashboard routes only.
+1) Implement a backend endpoint that calls the Nominatim Reverse Geocoding API.
+2) Integrate it into the Admin "Add Village" page so that clicking the map:
+   - sets marker lat/lng
+   - calls the backend reverse-geocode endpoint
+   - auto-fills district / address fields (or shows formatted address)
+3) Ensure validation, error handling, and clean architecture.
+4) Update Swagger/Postman documentation for the new endpoint.
+5) Make sure this endpoint is protected (admin only) OR at least authenticated, consistent with the project security approach.
 
-IMPLEMENTATION DETAILS:
-A) FRONTEND
-- Locate existing map component (e.g., Map.jsx, GoogleMap.jsx, MapView.jsx or similar).
-- Extract the map into a reusable component if it isn't already reusable.
-- Add/Update page: src/pages/admin/AddVillage.jsx (or similar file used for creating a village).
-- In AddVillage page:
-  - Display form fields: villageName, district, population, waterSourceType, sanitationStatus.
-  - Include the map component beneath or next to the form.
-  - Map must:
-     * show default center (Sri Lanka center or a safe default)
-     * allow click to place a marker
-     * call onLocationSelect({ lat, lng }) callback
-- Update API call for create village to include lat/lng.
+---------------------------------------------
+BACKEND CHANGES
+---------------------------------------------
 
-B) BACKEND
-- Update Village schema:
-  Option 1 (simple):
-    latitude: Number
-    longitude: Number
-  Option 2 (recommended GeoJSON):
-    location: { type: { type: String, enum: ['Point'], default: 'Point' }, coordinates: [Number] }  // [lng, lat]
-- Ensure create village endpoint accepts coordinates.
-- Add validation: reject if coordinates missing or invalid numbers.
-- Keep consistent response format and proper status codes.
+A) Create a new controller function in the Village component:
+- File: backend/src/controllers/village.controller.js (or equivalent)
+- Function: reverseGeocode(req, res, next)
 
-C) CLEANUP
-- Remove map from public page and ensure no dead code remains.
-- Ensure navbar/public routes no longer mention map.
-- Run lint fixes where necessary.
+B) Create a service function:
+- File: backend/src/services/village.service.js (or create it if missing)
+- Function: reverseGeocode(lat, lng)
 
-DELIVERABLE:
-- Modified public page(s): map removed cleanly.
-- Modified/created admin Add Village page: map included + coordinates saved.
-- Updated village API integration frontend.
-- Updated backend model and create endpoint.
-- Ensure build passes and no unused imports.
+Service should:
+- Validate lat/lng are numbers and within valid range.
+- Call Nominatim:
+  GET https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=<lat>&lon=<lng>
+- Set request headers:
+  - "User-Agent": "SE3040-SanitationApp/1.0 (dev)"
+  - "Accept": "application/json"
+- Return a simplified response:
+  {
+    formattedAddress,
+    district,
+    state,
+    country,
+    raw: <optional limited fields>
+  }
 
-Proceed by first searching for the map usage in public pages, then relocating it to AddVillage.
+C) Add a new route:
+- File: backend/src/routes/village.routes.js
+- Route: GET /api/villages/reverse-geocode?lat=...&lng=...
+- Apply auth middleware (protect) and role middleware (restrictTo('admin')) if present.
+
+D) Add validation & errors:
+- If lat/lng missing => 400
+- If fetch fails => 502 Bad Gateway
+- If no address found => 404 or 200 with null fields (choose consistent approach)
+
+E) Add Swagger doc entry for this endpoint:
+- Tag: Villages
+- Summary: Reverse geocode coordinates
+- Query params: lat, lng
+- Security: BearerAuth (if protected)
+
+Note: use native fetch (Node 18+) if available; otherwise add axios/node-fetch accordingly, but prefer minimal dependencies.
+
+---------------------------------------------
+FRONTEND CHANGES
+---------------------------------------------
+
+A) Locate the existing map picker component used for selecting coordinates:
+- Likely: LocationPicker.jsx / MapPicker.jsx / components/Map/...
+- Ensure it supports onLocationSelect({lat, lng}) callback.
+
+B) In Admin Add Village page (AddVillage.jsx or CreateVillage.jsx):
+- Maintain a form state including:
+  name, district, population, waterSourceType, sanitationStatus, latitude, longitude, address
+- On map click:
+  1. set latitude/longitude in state
+  2. call backend:
+     GET {{baseUrl}}/api/villages/reverse-geocode?lat=<lat>&lng=<lng>
+  3. show loading indicator "Fetching address..."
+  4. auto-fill:
+     - address (formattedAddress)
+     - district (if returned)
+  5. handle error gracefully: show toast/inline message but keep coordinates
+
+C) Ensure axios instance already includes JWT:
+- Use existing axiosInstance with Authorization header
+- Add a function in frontend/src/api/villages.js (if you have api layer) like:
+  reverseGeocode(lat, lng)
+
+D) UI:
+- Add read-only fields for latitude/longitude (or small text lines)
+- Add a read-only "Detected Address" field (editable optional)
+- Keep it professional.
+
+---------------------------------------------
+CLEANUP & QUALITY
+---------------------------------------------
+- Keep clean architecture: routes -> controller -> service.
+- Do not hardcode API URLs in multiple places; keep it in service.
+- Remove unused imports.
+- Ensure project still builds.
+
+DELIVERABLE CHECKLIST:
+- New backend endpoint /api/villages/reverse-geocode
+- Backend calls Nominatim (third-party API)
+- Add Village page auto-fills address/district from API
+- Proper validation & error handling
+- Swagger/Postman updated
+
+Start by searching the repo for "LocationPicker" or "Leaflet" or "tile.openstreetmap.org" to locate the map picker, and for village routes/controllers to place the new endpoint correctly.
