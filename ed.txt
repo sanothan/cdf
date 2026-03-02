@@ -1,4 +1,58 @@
-PORT=5000
-MONGODB_URI=mongodb+srv://diludilush963_db_user:XAuFUqwetqbx8jzr@cluster0.cu9gefz.mongodb.net/santrack?retryWrites=true&w=majority&appName=Cluster0
-JWT_SECRET=santrack-super-secret-key
-JWT_EXPIRES_IN=7d
+TASK: Move the existing Google Map component currently used in a public page to the Admin "Add Village" page and integrate it with the Village create form.
+
+CONTEXT:
+This project is a MERN app. A Google Map (or map component) was already implemented and shown on a public page (likely Home/About/Contact or a PublicMap page). We no longer want the map in any public page.
+We want the map only in Admin role, inside the Village Management module, specifically in the "Add Village" page/form.
+
+GOALS:
+1) Find where the map is currently rendered in public pages.
+2) Remove that map UI from the public page completely (including unused imports, styling blocks, and any public routes/menu items that exist only for that map).
+3) Reuse the same map component (do not rewrite from scratch) in the "Add Village" page.
+4) In the Add Village form, allow admin to click on the map to set a marker location.
+5) When admin clicks the map, store the coordinates in form state:
+   - latitude
+   - longitude
+6) On submit, send latitude/longitude along with village data to backend.
+7) Update backend Village model (if not already) to store coordinates (either lat/lng fields or GeoJSON).
+8) Update backend Village create controller/service to validate that coordinates exist and save them.
+9) Show the selected coordinates on the Add Village UI (small read-only fields or a label).
+10) Ensure this is restricted to admin dashboard routes only.
+
+IMPLEMENTATION DETAILS:
+A) FRONTEND
+- Locate existing map component (e.g., Map.jsx, GoogleMap.jsx, MapView.jsx or similar).
+- Extract the map into a reusable component if it isn't already reusable.
+- Add/Update page: src/pages/admin/AddVillage.jsx (or similar file used for creating a village).
+- In AddVillage page:
+  - Display form fields: villageName, district, population, waterSourceType, sanitationStatus.
+  - Include the map component beneath or next to the form.
+  - Map must:
+     * show default center (Sri Lanka center or a safe default)
+     * allow click to place a marker
+     * call onLocationSelect({ lat, lng }) callback
+- Update API call for create village to include lat/lng.
+
+B) BACKEND
+- Update Village schema:
+  Option 1 (simple):
+    latitude: Number
+    longitude: Number
+  Option 2 (recommended GeoJSON):
+    location: { type: { type: String, enum: ['Point'], default: 'Point' }, coordinates: [Number] }  // [lng, lat]
+- Ensure create village endpoint accepts coordinates.
+- Add validation: reject if coordinates missing or invalid numbers.
+- Keep consistent response format and proper status codes.
+
+C) CLEANUP
+- Remove map from public page and ensure no dead code remains.
+- Ensure navbar/public routes no longer mention map.
+- Run lint fixes where necessary.
+
+DELIVERABLE:
+- Modified public page(s): map removed cleanly.
+- Modified/created admin Add Village page: map included + coordinates saved.
+- Updated village API integration frontend.
+- Updated backend model and create endpoint.
+- Ensure build passes and no unused imports.
+
+Proceed by first searching for the map usage in public pages, then relocating it to AddVillage.
