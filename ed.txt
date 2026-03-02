@@ -1,0 +1,4 @@
+PORT=5000
+MONGODB_URI=mongodb+srv://diludilush963_db_user:XAuFUqwetqbx8jzr@cluster0.cu9gefz.mongodb.net/santrack?retryWrites=true&w=majority&appName=Cluster0
+JWT_SECRET=santrack-super-secret-key
+JWT_EXPIRES_IN=7d
